@@ -1,4 +1,6 @@
 (function (window) {
+    const MAX_EVENT_PARAMS_SIZE = 65536; // 64 KB limit
+
     const pharaon = {
         config: {},
         queue: [],
@@ -25,11 +27,22 @@
                 return;
             }
 
+            // Serialize event_params and check size
+            let serializedParams = JSON.stringify(eventData);
+            if (serializedParams.length > MAX_EVENT_PARAMS_SIZE) {
+                console.warn(
+                    `event_params size (${serializedParams.length} bytes) exceeds the limit of ${MAX_EVENT_PARAMS_SIZE} bytes. Truncating.`
+                );
+
+                // Truncate oversized parameters
+                serializedParams = serializedParams.slice(0, MAX_EVENT_PARAMS_SIZE - 3) + "...";
+            }
+
             const event = {
                 event_name: eventName,
                 event_timestamp: new Date().toISOString(),
                 ...this.getBrowserData(),
-                event_params: JSON.stringify(eventData), // Serialize custom parameters
+                event_params: serializedParams,
             };
 
             if (this.config.debug) {
