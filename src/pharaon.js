@@ -63,16 +63,13 @@
             return pseudoId;
         },
 
+        // Modified sendEvent to log events instead of sending them to a server
         sendEvent(event) {
-            fetch(this.config.endpoint, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(event),
-            }).catch((err) => {
-                if (this.config.debug) {
-                    console.error("Error sending event:", err);
-                }
-            });
+            if (this.config.debug) {
+                console.log("Event sent (logged for debugging):", event);
+            } else {
+                console.log("Event:", event);
+            }
         },
 
         processQueue() {
