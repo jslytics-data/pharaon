@@ -5,6 +5,7 @@
         config: {},
         queue: [],
         isInitialized: false,
+        userParams: {}, // Holds current user params
 
         init(config) {
             this.config = { ...this.config, ...config };
@@ -52,6 +53,37 @@
             this.sendEvent(event);
         },
 
+        setUserParams(params = {}) {
+            if (typeof params !== "object" || Array.isArray(params)) {
+                console.error("User parameters must be a flat object.");
+                return;
+            }
+
+            // Validate the user_params are flat and non-nested
+            const isNested = Object.values(params).some(
+                (value) => typeof value === "object" && !Array.isArray(value)
+            );
+            if (isNested) {
+                console.error("User parameters must not contain nested objects.");
+                return;
+            }
+
+            // Assign new user params and log for debugging
+            this.userParams = { ...this.userParams, ...params };
+
+            const userParamsEvent = {
+                user_pseudo_id: this.getOrCreateUserPseudoId(),
+                timestamp_assignment: new Date().toISOString(),
+                user_params: JSON.stringify(this.userParams),
+            };
+
+            if (this.config.debug) {
+                console.log("User Parameters Updated:", userParamsEvent);
+            }
+
+            this.sendUserParams(userParamsEvent);
+        },
+
         getBrowserData() {
             return {
                 page_url: window.location.href,
@@ -81,6 +113,14 @@
                 console.log("Event sent (logged for debugging):", event);
             } else {
                 console.log("Event:", event);
+            }
+        },
+
+        sendUserParams(userParams) {
+            if (this.config.debug) {
+                console.log("User Parameters Sent (logged for debugging):", userParams);
+            } else {
+                console.log("User Parameters:", userParams);
             }
         },
 
