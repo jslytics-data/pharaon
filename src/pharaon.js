@@ -29,7 +29,7 @@
                 event_name: eventName,
                 event_timestamp: new Date().toISOString(),
                 ...this.getBrowserData(),
-                ...eventData,
+                event_params: { ...eventData }, // Store all custom parameters under event_params
             };
 
             if (this.config.debug) {
@@ -63,7 +63,6 @@
             return pseudoId;
         },
 
-        // Modified sendEvent to log events instead of sending them to a server
         sendEvent(event) {
             if (this.config.debug) {
                 console.log("Event sent (logged for debugging):", event);
