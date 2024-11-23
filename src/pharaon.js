@@ -29,7 +29,7 @@
                 event_name: eventName,
                 event_timestamp: new Date().toISOString(),
                 ...this.getBrowserData(),
-                event_params: { ...eventData }, // Store all custom parameters under event_params
+                event_params: JSON.stringify(eventData), // Serialize custom parameters
             };
 
             if (this.config.debug) {
