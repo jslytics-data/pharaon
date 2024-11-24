@@ -1,5 +1,6 @@
 (function (window) {
-    const MAX_EVENT_PARAMS_SIZE = 65536; // 64 KB limit
+    const MAX_EVENT_PARAMS_SIZE = 65536; // 64 KB limit for event parameters
+    const MAX_USER_IDENTIFIERS_SIZE = 2048; // 2 KB limit for user identifiers
     const COOKIE_MAX_AGE = 31536000; // One year in seconds
 
     /**
@@ -10,7 +11,7 @@
             this.config = {};
             this.queue = [];
             this.isInitialized = false;
-            this.userParams = {}; // Holds current user parameters
+            this.userIdentifiers = {}; // Holds current user identifiers
 
             // Check if localStorage is available
             this.localStorageAvailable = this.isLocalStorageAvailable();
@@ -79,17 +80,17 @@
         }
 
         /**
-         * Sets user parameters.
-         * @param {Object} params - User parameters to set.
+         * Sets user identifiers.
+         * @param {Object} identifiers - User identifiers to set.
          */
-        setUserParams(params = {}) {
-            if (typeof params !== "object" || Array.isArray(params)) {
-                this.log("User parameters must be a flat object.", "error");
+        setUserIdentifiers(identifiers = {}) {
+            if (typeof identifiers !== "object" || Array.isArray(identifiers)) {
+                this.log("User identifiers must be a flat object.", "error");
                 return;
             }
 
-            // Validate that userParams are flat and contain valid values
-            const hasInvalidValues = Object.values(params).some(
+            // Validate that userIdentifiers are flat and contain valid values
+            const hasInvalidValues = Object.values(identifiers).some(
                 (value) =>
                     typeof value === "object" ||
                     typeof value === "function" ||
@@ -97,24 +98,34 @@
             );
 
             if (hasInvalidValues) {
-                this.log("User parameters must be flat and not contain functions or undefined values.", "error");
+                this.log("User identifiers must be flat and not contain functions or undefined values.", "error");
                 return;
             }
 
-            // Merge new user parameters
-            this.userParams = { ...this.userParams, ...params };
+            // Serialize to check size
+            const serializedIdentifiers = JSON.stringify(identifiers);
+            if (serializedIdentifiers.length > MAX_USER_IDENTIFIERS_SIZE) {
+                this.log(
+                    `user_identifiers size (${serializedIdentifiers.length} bytes) exceeds the limit of ${MAX_USER_IDENTIFIERS_SIZE} bytes. Operation rejected.`,
+                    "error"
+                );
+                return;
+            }
 
-            const userParamsEvent = {
+            // Merge new user identifiers
+            this.userIdentifiers = { ...this.userIdentifiers, ...identifiers };
+
+            const userIdentifiersEvent = {
                 user_pseudo_id: this.getUserPseudoId(),
                 timestamp_assignment: new Date().toISOString(),
-                user_params: JSON.stringify(this.userParams),
+                user_identifiers: serializedIdentifiers,
             };
 
             if (this.config.debug) {
-                console.log("Pharaon: User Parameters Updated:", userParamsEvent);
+                console.log("Pharaon: User Identifiers Updated:", userIdentifiersEvent);
             }
 
-            this.sendUserParams(userParamsEvent);
+            this.sendUserIdentifiers(userIdentifiersEvent);
         }
 
         /**
@@ -170,21 +181,19 @@
             if (this.config.debug) {
                 console.log("Pharaon: Event sent (logged for debugging):", event);
             } else {
-                // Implement actual sending logic here
                 console.log("Pharaon: Event:", event);
             }
         }
 
         /**
-         * Sends the user parameters data.
-         * @param {Object} userParams - User parameters data.
+         * Sends the user identifiers data.
+         * @param {Object} userIdentifiers - User identifiers data.
          */
-        sendUserParams(userParams) {
+        sendUserIdentifiers(userIdentifiers) {
             if (this.config.debug) {
-                console.log("Pharaon: User Parameters Sent (logged for debugging):", userParams);
+                console.log("Pharaon: User Identifiers Sent (logged for debugging):", userIdentifiers);
             } else {
-                // Implement actual sending logic here
-                console.log("Pharaon: User Parameters:", userParams);
+                console.log("Pharaon: User Identifiers:", userIdentifiers);
             }
         }
 
