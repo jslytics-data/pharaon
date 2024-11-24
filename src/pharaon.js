@@ -30,9 +30,7 @@
             this.isInitialized = true;
             this.processQueue();
 
-            if (this.config.debug) {
-                console.log("Pharaon: Initialized with config:", this.config);
-            }
+            this.log(`Initialized with config: ${JSON.stringify(this.config)}`, 'info');
         }
 
         /**
@@ -71,10 +69,6 @@
                 ...this.getBrowserData(),
                 event_params: serializedParams,
             };
-
-            if (this.config.debug) {
-                console.log("Pharaon: Tracking Event:", event);
-            }
 
             this.sendEvent(event);
         }
@@ -120,10 +114,6 @@
                 timestamp_assignment: new Date().toISOString(),
                 user_identifiers: serializedIdentifiers,
             };
-
-            if (this.config.debug) {
-                console.log("Pharaon: User Identifiers Updated:", userIdentifiersEvent);
-            }
 
             this.sendUserIdentifiers(userIdentifiersEvent);
         }
@@ -178,11 +168,7 @@
          * @param {Object} event - Event data.
          */
         sendEvent(event) {
-            if (this.config.debug) {
-                console.log("Pharaon: Event sent (logged for debugging):", event);
-            } else {
-                console.log("Pharaon: Event:", event);
-            }
+            this.log(`Event: ${JSON.stringify(event)}`, 'info');
         }
 
         /**
@@ -190,11 +176,7 @@
          * @param {Object} userIdentifiers - User identifiers data.
          */
         sendUserIdentifiers(userIdentifiers) {
-            if (this.config.debug) {
-                console.log("Pharaon: User Identifiers Sent (logged for debugging):", userIdentifiers);
-            } else {
-                console.log("Pharaon: User Identifiers:", userIdentifiers);
-            }
+            this.log(`User Identifiers: ${JSON.stringify(userIdentifiers)}`, 'info');
         }
 
         /**
@@ -210,10 +192,16 @@
         /**
          * Logs messages with the specified type.
          * @param {string} message - Message to log.
-         * @param {string} type - Type of the log ('log', 'error', 'warn', etc.).
+         * @param {string} type - Type of the log ('log', 'info', 'warn', 'error').
          */
         log(message, type = "log") {
-            console[type](`Pharaon: ${message}`);
+            const prefixedMessage = `Pharaon: ${message}`;
+
+            if (type === 'error' || type === 'warn') {
+                console[type](prefixedMessage);
+            } else if (this.config.debug) {
+                console[type](prefixedMessage);
+            }
         }
 
         /**
