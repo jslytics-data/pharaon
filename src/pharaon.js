@@ -30,7 +30,7 @@
             this.isInitialized = true;
             this.processQueue();
 
-            this.log(`Initialized with config: ${JSON.stringify(this.config)}`, 'info');
+            this.log(`Initialized with config:`, 'info', this.config);
         }
 
         /**
@@ -67,7 +67,7 @@
                 event_name: eventName,
                 event_timestamp: new Date().toISOString(),
                 ...this.getBrowserData(),
-                event_params: serializedParams,
+                event_params: eventParams, // Keep as an object
             };
 
             this.sendEvent(event);
@@ -112,7 +112,7 @@
             const userIdentifiersEvent = {
                 user_pseudo_id: this.getUserPseudoId(),
                 timestamp_assignment: new Date().toISOString(),
-                user_identifiers: serializedIdentifiers,
+                user_identifiers: identifiers, // Keep as an object
             };
 
             this.sendUserIdentifiers(userIdentifiersEvent);
@@ -168,7 +168,7 @@
          * @param {Object} event - Event data.
          */
         sendEvent(event) {
-            this.log(`Event: ${JSON.stringify(event)}`, 'info');
+            this.log(`Event:`, 'info', event);
         }
 
         /**
@@ -176,7 +176,7 @@
          * @param {Object} userIdentifiers - User identifiers data.
          */
         sendUserIdentifiers(userIdentifiers) {
-            this.log(`User Identifiers: ${JSON.stringify(userIdentifiers)}`, 'info');
+            this.log(`User Identifiers:`, 'info', userIdentifiers);
         }
 
         /**
@@ -193,14 +193,23 @@
          * Logs messages with the specified type.
          * @param {string} message - Message to log.
          * @param {string} type - Type of the log ('log', 'info', 'warn', 'error').
+         * @param {Object} [data] - Optional data to log alongside the message.
          */
-        log(message, type = "log") {
+        log(message, type = "log", data) {
             const prefixedMessage = `Pharaon: ${message}`;
 
             if (type === 'error' || type === 'warn') {
-                console[type](prefixedMessage);
+                if (data !== undefined) {
+                    console[type](prefixedMessage, data);
+                } else {
+                    console[type](prefixedMessage);
+                }
             } else if (this.config.debug) {
-                console[type](prefixedMessage);
+                if (data !== undefined) {
+                    console[type](prefixedMessage, data);
+                } else {
+                    console[type](prefixedMessage);
+                }
             }
         }
 
