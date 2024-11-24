@@ -15,22 +15,19 @@
 
             // Check if localStorage is available
             this.localStorageAvailable = this.isLocalStorageAvailable();
-
-            // Cache static values that are unlikely to change
             this.deviceUserAgent = navigator.userAgent;
             this.devicePlatform = navigator.platform;
         }
 
         /**
-         * Initializes the Pharaon tracker with the given configuration.
+         * Initializes the tracker with the given configuration.
          * @param {Object} config - Configuration object.
          */
         init(config) {
             this.config = { ...this.config, ...config };
             this.isInitialized = true;
             this.processQueue();
-
-            this.log(`Initialized with config:`, 'info', this.config);
+            this.log("Initialized with config: " + JSON.stringify(this.config), "info");
         }
 
         /**
@@ -45,21 +42,19 @@
             }
 
             if (typeof eventName !== "string" || !eventName.trim()) {
-                this.log("Event name is required and must be a non-empty string.", "error");
+                this.log("Event name is required and must be a non-empty string.", "error", true);
                 return;
             }
 
-            // Serialize eventParams
             let serializedParams = JSON.stringify(eventParams);
 
             // Check size and truncate if necessary
             if (serializedParams.length > MAX_EVENT_PARAMS_SIZE) {
                 this.log(
                     `event_params size (${serializedParams.length} bytes) exceeds the limit of ${MAX_EVENT_PARAMS_SIZE} bytes. Truncating.`,
-                    "warn"
+                    "warn",
+                    true
                 );
-
-                // Truncate oversized parameters
                 serializedParams = serializedParams.slice(0, MAX_EVENT_PARAMS_SIZE - 3) + "...";
             }
 
@@ -67,10 +62,10 @@
                 event_name: eventName,
                 event_timestamp: new Date().toISOString(),
                 ...this.getBrowserData(),
-                event_params: eventParams, // Keep as an object
+                event_params: serializedParams,
             };
 
-            this.sendEvent(event);
+            this.log("Tracking Event: " + JSON.stringify(event), "info");
         }
 
         /**
@@ -79,43 +74,43 @@
          */
         setUserIdentifiers(identifiers = {}) {
             if (typeof identifiers !== "object" || Array.isArray(identifiers)) {
-                this.log("User identifiers must be a flat object.", "error");
+                this.log("User identifiers must be a flat object.", "error", true);
                 return;
             }
 
-            // Validate that userIdentifiers are flat and contain valid values
-            const hasInvalidValues = Object.values(identifiers).some(
-                (value) =>
-                    typeof value === "object" ||
-                    typeof value === "function" ||
-                    value === undefined
-            );
-
-            if (hasInvalidValues) {
-                this.log("User identifiers must be flat and not contain functions or undefined values.", "error");
-                return;
-            }
-
-            // Serialize to check size
             const serializedIdentifiers = JSON.stringify(identifiers);
+
             if (serializedIdentifiers.length > MAX_USER_IDENTIFIERS_SIZE) {
                 this.log(
                     `user_identifiers size (${serializedIdentifiers.length} bytes) exceeds the limit of ${MAX_USER_IDENTIFIERS_SIZE} bytes. Operation rejected.`,
-                    "error"
+                    "error",
+                    true
                 );
                 return;
             }
 
-            // Merge new user identifiers
             this.userIdentifiers = { ...this.userIdentifiers, ...identifiers };
 
             const userIdentifiersEvent = {
                 user_pseudo_id: this.getUserPseudoId(),
                 timestamp_assignment: new Date().toISOString(),
-                user_identifiers: identifiers, // Keep as an object
+                user_identifiers: serializedIdentifiers,
             };
 
-            this.sendUserIdentifiers(userIdentifiersEvent);
+            this.log("User Identifiers Updated: " + JSON.stringify(userIdentifiersEvent), "info");
+        }
+
+        /**
+         * Logs messages to the console with a consistent prefix and conditional verbosity.
+         * @param {string} message - The message to log.
+         * @param {string} type - The log type: 'info', 'warn', 'error', etc.
+         * @param {boolean} force - If true, always log regardless of debug mode.
+         */
+        log(message, type = "log", force = false) {
+            const prefix = "Pharaon: ";
+            if (force || this.config.debug) {
+                console[type](`${prefix}${message}`);
+            }
         }
 
         /**
@@ -123,7 +118,6 @@
          * @returns {Object} - Browser data.
          */
         getBrowserData() {
-            // Get current timezone in case it changed
             const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
             return {
@@ -164,22 +158,6 @@
         }
 
         /**
-         * Sends the event data.
-         * @param {Object} event - Event data.
-         */
-        sendEvent(event) {
-            this.log(`Event:`, 'info', event);
-        }
-
-        /**
-         * Sends the user identifiers data.
-         * @param {Object} userIdentifiers - User identifiers data.
-         */
-        sendUserIdentifiers(userIdentifiers) {
-            this.log(`User Identifiers:`, 'info', userIdentifiers);
-        }
-
-        /**
          * Processes the queued events.
          */
         processQueue() {
@@ -187,30 +165,6 @@
                 this.trackEvent(eventName, eventParams);
             });
             this.queue.length = 0; // Clear the queue
-        }
-
-        /**
-         * Logs messages with the specified type.
-         * @param {string} message - Message to log.
-         * @param {string} type - Type of the log ('log', 'info', 'warn', 'error').
-         * @param {Object} [data] - Optional data to log alongside the message.
-         */
-        log(message, type = "log", data) {
-            const prefixedMessage = `Pharaon: ${message}`;
-
-            if (type === 'error' || type === 'warn') {
-                if (data !== undefined) {
-                    console[type](prefixedMessage, data);
-                } else {
-                    console[type](prefixedMessage);
-                }
-            } else if (this.config.debug) {
-                if (data !== undefined) {
-                    console[type](prefixedMessage, data);
-                } else {
-                    console[type](prefixedMessage);
-                }
-            }
         }
 
         /**
@@ -224,7 +178,7 @@
                 localStorage.removeItem(testKey);
                 return true;
             } catch (e) {
-                this.log("Local storage is not available.", "warn");
+                this.log("Local storage is not available.", "warn", true);
                 return false;
             }
         }
@@ -237,7 +191,6 @@
             if (window.crypto && crypto.randomUUID) {
                 return crypto.randomUUID();
             } else {
-                // Fallback UUID generation
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
                     const r = (Math.random() * 16) | 0;
                     const v = c === 'x' ? r : (r & 0x3) | 0x8;
