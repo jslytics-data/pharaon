@@ -2,6 +2,7 @@
     const MAX_EVENT_PARAMS_SIZE = 65536; // 64 KB limit for event parameters
     const MAX_USER_IDENTIFIERS_SIZE = 2048; // 2 KB limit for user identifiers
     const COOKIE_MAX_AGE = 31536000; // One year in seconds
+    const MAX_EVENT_NAME_LENGTH = 256;
 
     /**
      * Pharaon web tracking library
@@ -46,6 +47,16 @@
                 return;
             }
 
+            // Check and truncate long event names
+            if (eventName.length > MAX_EVENT_NAME_LENGTH) {
+                this.log(
+                    `Event name length (${eventName.length} characters) exceeds the limit of ${MAX_EVENT_NAME_LENGTH}. Truncating.`,
+                    "warn",
+                    true
+                );
+                eventName = eventName.slice(0, MAX_EVENT_NAME_LENGTH);
+            }
+
             let serializedParams = JSON.stringify(eventParams);
 
             // Check size and truncate if necessary
@@ -67,6 +78,7 @@
 
             this.log("Tracking Event: " + JSON.stringify(event), "info");
         }
+
 
         /**
          * Sets user identifiers.
