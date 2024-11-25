@@ -118,12 +118,17 @@
          * @param {string} type - The log type: 'info', 'warn', 'error', etc.
          * @param {boolean} force - If true, always log regardless of debug mode.
          */
-        log(message, type = "log", force = false) {
+        log(message, type = "log", force = false, data = null) {
             const prefix = "Pharaon: ";
             if (force || this.config.debug) {
-                console[type](`${prefix}${message}`);
+                if (data && typeof data === "object") {
+                    console[type](`${prefix}${message}`, data);
+                } else {
+                    console[type](`${prefix}${message}`);
+                }
             }
         }
+
 
         /**
          * Retrieves browser data.
