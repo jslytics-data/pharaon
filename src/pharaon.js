@@ -15,8 +15,8 @@
 
             // Check if localStorage is available
             this.localStorageAvailable = this.isLocalStorageAvailable();
-            this.deviceUserAgent = navigator.userAgent;
-            this.devicePlatform = navigator.platform;
+            this.deviceUserAgent = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+            this.devicePlatform = (typeof navigator !== 'undefined' && navigator.platform) || '';
         }
 
         /**
@@ -24,10 +24,14 @@
          * @param {Object} config - Configuration object.
          */
         init(config) {
-            this.config = { ...this.config, ...config };
-            this.isInitialized = true;
-            this.processQueue();
-            this.log("Initialized with config: " + JSON.stringify(this.config), "info");
+            try {
+                this.config = { ...this.config, ...config };
+                this.isInitialized = true;
+                this.processQueue();
+                this.log("Initialized with config: " + JSON.stringify(this.config), "info");
+            } catch (error) {
+                this.log(`Error in init: ${error.message}`, "error", true);
+            }
         }
 
         /**
@@ -36,47 +40,64 @@
          * @param {Object} eventParams - Parameters associated with the event.
          */
         trackEvent(eventName, eventParams = {}) {
-            if (!this.isInitialized) {
-                this.queue.push({ eventName, eventParams });
-                return;
+            try {
+                if (!this.isInitialized) {
+                    this.queue.push({ eventName, eventParams });
+                    return;
+                }
+
+                if (typeof eventName !== "string" || !eventName.trim()) {
+                    this.log("Event name is required and must be a non-empty string.", "error", true);
+                    return;
+                }
+
+                const MAX_EVENT_NAME_LENGTH = 256;
+                if (eventName.length > MAX_EVENT_NAME_LENGTH) {
+                    this.log(
+                        `Event name length (${eventName.length} characters) exceeds the limit of ${MAX_EVENT_NAME_LENGTH}. Truncating.`,
+                        "warn",
+                        true
+                    );
+                    eventName = eventName.slice(0, MAX_EVENT_NAME_LENGTH);
+                }
+
+                // Validate eventParams is a plain object
+                if (!this.isPlainObject(eventParams)) {
+                    this.log("eventParams must be a flat object.", "error", true);
+                    return;
+                }
+
+                // Estimate serialized size before truncating
+                let serializedParams;
+                try {
+                    serializedParams = JSON.stringify(eventParams);
+                } catch (error) {
+                    this.log(`Failed to serialize eventParams: ${error.message}`, "error", true);
+                    return;
+                }
+
+                if (serializedParams.length > MAX_EVENT_PARAMS_SIZE) {
+                    this.log(
+                        `event_params size (${serializedParams.length} bytes) exceeds the limit of ${MAX_EVENT_PARAMS_SIZE} bytes. Truncating.`,
+                        "warn",
+                        true
+                    );
+
+                    // Truncate eventParams object itself
+                    eventParams = this.truncateObject(eventParams, MAX_EVENT_PARAMS_SIZE);
+                }
+
+                const event = {
+                    event_name: eventName,
+                    event_timestamp: new Date().toISOString(),
+                    ...this.getBrowserData(),
+                    event_params: eventParams,
+                };
+
+                this.log("Tracking Event:", "info", false, event);
+            } catch (error) {
+                this.log(`Error in trackEvent: ${error.message}`, "error", true);
             }
-
-            if (typeof eventName !== "string" || !eventName.trim()) {
-                this.log("Event name is required and must be a non-empty string.", "error", true);
-                return;
-            }
-
-            const MAX_EVENT_NAME_LENGTH = 256;
-            if (eventName.length > MAX_EVENT_NAME_LENGTH) {
-                this.log(
-                    `Event name length (${eventName.length} characters) exceeds the limit of ${MAX_EVENT_NAME_LENGTH}. Truncating.`,
-                    "warn",
-                    true
-                );
-                eventName = eventName.slice(0, MAX_EVENT_NAME_LENGTH);
-            }
-
-            // Estimate serialized size before truncating
-            const serializedParams = JSON.stringify(eventParams);
-            if (serializedParams.length > MAX_EVENT_PARAMS_SIZE) {
-                this.log(
-                    `event_params size (${serializedParams.length} bytes) exceeds the limit of ${MAX_EVENT_PARAMS_SIZE} bytes. Truncating.`,
-                    "warn",
-                    true
-                );
-
-                // Truncate eventParams object itself
-                eventParams = this.truncateObject(eventParams, MAX_EVENT_PARAMS_SIZE);
-            }
-
-            const event = {
-                event_name: eventName,
-                event_timestamp: new Date().toISOString(),
-                ...this.getBrowserData(),
-                event_params: eventParams,
-            };
-
-            this.log("Tracking Event:", "info", false, event);
         }
 
         /**
@@ -84,31 +105,41 @@
          * @param {Object} identifiers - User identifiers to set.
          */
         setUserIdentifiers(identifiers = {}) {
-            if (typeof identifiers !== "object" || Array.isArray(identifiers)) {
-                this.log("User identifiers must be a flat object.", "error", true);
-                return;
+            try {
+                if (!this.isPlainObject(identifiers)) {
+                    this.log("User identifiers must be a flat object.", "error", true);
+                    return;
+                }
+
+                let serializedIdentifiers;
+                try {
+                    serializedIdentifiers = JSON.stringify(identifiers);
+                } catch (error) {
+                    this.log(`Failed to serialize user identifiers: ${error.message}`, "error", true);
+                    return;
+                }
+
+                if (serializedIdentifiers.length > MAX_USER_IDENTIFIERS_SIZE) {
+                    this.log(
+                        `user_identifiers size (${serializedIdentifiers.length} bytes) exceeds the limit of ${MAX_USER_IDENTIFIERS_SIZE} bytes. Operation rejected.`,
+                        "error",
+                        true
+                    );
+                    return;
+                }
+
+                this.userIdentifiers = { ...this.userIdentifiers, ...identifiers };
+
+                const userIdentifiersEvent = {
+                    user_pseudo_id: this.getUserPseudoId(),
+                    timestamp_assignment: new Date().toISOString(),
+                    user_identifiers: identifiers,
+                };
+
+                this.log("User Identifiers Updated:", "info", false, userIdentifiersEvent);
+            } catch (error) {
+                this.log(`Error in setUserIdentifiers: ${error.message}`, "error", true);
             }
-
-            const serializedIdentifiers = JSON.stringify(identifiers);
-
-            if (serializedIdentifiers.length > MAX_USER_IDENTIFIERS_SIZE) {
-                this.log(
-                    `user_identifiers size (${serializedIdentifiers.length} bytes) exceeds the limit of ${MAX_USER_IDENTIFIERS_SIZE} bytes. Operation rejected.`,
-                    "error",
-                    true
-                );
-                return;
-            }
-
-            this.userIdentifiers = { ...this.userIdentifiers, ...identifiers };
-
-            const userIdentifiersEvent = {
-                user_pseudo_id: this.getUserPseudoId(),
-                timestamp_assignment: new Date().toISOString(),
-                user_identifiers: identifiers,
-            };
-
-            this.log("User Identifiers Updated:", "info", false, userIdentifiersEvent);
         }
 
         /**
@@ -124,7 +155,14 @@
             for (const [key, value] of Object.entries(obj)) {
                 if (size >= maxSize) break;
 
-                const entrySize = JSON.stringify({ [key]: value }).length;
+                let entrySize;
+                try {
+                    entrySize = JSON.stringify({ [key]: value }).length;
+                } catch (error) {
+                    this.log(`Failed to serialize property ${key}: ${error.message}`, "error", true);
+                    continue;
+                }
+
                 if (size + entrySize > maxSize) {
                     truncated[key] =
                         typeof value === "string" ? value.slice(0, maxSize - size) + "..." : value;
@@ -161,16 +199,18 @@
          * @returns {Object} - Browser data.
          */
         getBrowserData() {
-            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const userTimezone = (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC';
 
             return {
-                page_url: window.location.href,
-                page_referrer: document.referrer || null,
+                page_url: (typeof window !== 'undefined' && window.location && window.location.href) || '',
+                page_referrer: (typeof document !== 'undefined' && document.referrer) || '',
                 user_pseudo_id: this.getUserPseudoId(),
                 user_timezone: userTimezone,
-                browser_screen_size: `${window.screen.width}x${window.screen.height}`,
-                browser_viewport_size: `${window.innerWidth}x${window.innerHeight}`,
-                browser_language: navigator.language,
+                browser_screen_size:
+                    (typeof window !== 'undefined' && window.screen && `${window.screen.width}x${window.screen.height}`) || '',
+                browser_viewport_size:
+                    (typeof window !== 'undefined' && `${window.innerWidth}x${window.innerHeight}`) || '',
+                browser_language: (typeof navigator !== 'undefined' && navigator.language) || '',
                 device_user_agent: this.deviceUserAgent,
                 device_platform: this.devicePlatform,
             };
@@ -184,17 +224,35 @@
             let pseudoId = null;
 
             if (this.localStorageAvailable) {
-                pseudoId = localStorage.getItem("js_user_pseudo_id");
-            } else {
+                try {
+                    pseudoId = localStorage.getItem("js_user_pseudo_id");
+                } catch (e) {
+                    this.log("Error accessing localStorage: " + e.message, "warn", true);
+                    this.localStorageAvailable = false;
+                }
+            }
+
+            if (!pseudoId) {
                 pseudoId = this.getCookie("js_user_pseudo_id");
             }
 
             if (!pseudoId) {
                 pseudoId = this.generateUUID();
                 if (this.localStorageAvailable) {
-                    localStorage.setItem("js_user_pseudo_id", pseudoId);
+                    try {
+                        localStorage.setItem("js_user_pseudo_id", pseudoId);
+                    } catch (e) {
+                        this.log("Error setting item in localStorage: " + e.message, "warn", true);
+                        this.localStorageAvailable = false;
+                    }
                 }
-                document.cookie = `js_user_pseudo_id=${pseudoId}; path=/; max-age=${COOKIE_MAX_AGE}; Secure; SameSite=Lax`;
+                try {
+                    if (typeof document !== 'undefined') {
+                        document.cookie = `js_user_pseudo_id=${pseudoId}; path=/; max-age=${COOKIE_MAX_AGE}; Secure; SameSite=Lax`;
+                    }
+                } catch (e) {
+                    this.log("Error setting cookie: " + e.message, "warn", true);
+                }
             }
 
             return pseudoId;
@@ -205,7 +263,11 @@
          */
         processQueue() {
             this.queue.forEach(({ eventName, eventParams }) => {
-                this.trackEvent(eventName, eventParams);
+                try {
+                    this.trackEvent(eventName, eventParams);
+                } catch (error) {
+                    this.log(`Error processing queued event: ${error.message}`, "error", true);
+                }
             });
             this.queue.length = 0; // Clear the queue
         }
@@ -231,12 +293,33 @@
          * @returns {string} - UUID string.
          */
         generateUUID() {
-            if (window.crypto && crypto.randomUUID) {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
                 return crypto.randomUUID();
+            } else if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+                const buf = new Uint8Array(16);
+                crypto.getRandomValues(buf);
+                // Adapted from RFC 4122 version 4 UUID generation
+                buf[6] = (buf[6] & 0x0f) | 0x40; // Version 4
+                buf[8] = (buf[8] & 0x3f) | 0x80; // Variant 10
+
+                const byteToHex = [];
+                for (let i = 0; i < 256; ++i) {
+                    byteToHex[i] = (i + 0x100).toString(16).substr(1);
+                }
+
+                let uuid = '';
+                for (let i = 0; i < 16; ++i) {
+                    uuid += byteToHex[buf[i]];
+                    if (i === 3 || i === 5 || i === 7 || i === 9) {
+                        uuid += '-';
+                    }
+                }
+                return uuid;
             } else {
+                // As a last resort, use Math.random (less secure)
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                    const r = (Math.random() * 16) | 0;
-                    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+                    const r = Math.random() * 16 | 0;
+                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
                     return v.toString(16);
                 });
             }
@@ -248,8 +331,19 @@
          * @returns {string|null} - Cookie value or null if not found.
          */
         getCookie(name) {
-            const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-            return match ? match[2] : null;
+            const escapedName = name.replace(/([.*+?^${}()|[\]\\])/g, '\\$1');
+            const regex = new RegExp('(?:^|; )' + escapedName + '=([^;]*)');
+            const match = (typeof document !== 'undefined' && document.cookie.match(regex));
+            return match ? match[1] : null;
+        }
+
+        /**
+         * Checks if a value is a plain object.
+         * @param {any} obj - The value to check.
+         * @returns {boolean} - True if obj is a plain object, false otherwise.
+         */
+        isPlainObject(obj) {
+            return Object.prototype.toString.call(obj) === '[object Object]';
         }
     }
 
