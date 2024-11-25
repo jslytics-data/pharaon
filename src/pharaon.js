@@ -2,7 +2,6 @@
     const MAX_EVENT_PARAMS_SIZE = 65536; // 64 KB limit for event parameters
     const MAX_USER_IDENTIFIERS_SIZE = 2048; // 2 KB limit for user identifiers
     const COOKIE_MAX_AGE = 31536000; // One year in seconds
-    const MAX_EVENT_NAME_LENGTH = 256;
 
     /**
      * Pharaon web tracking library
@@ -57,29 +56,28 @@
                 eventName = eventName.slice(0, MAX_EVENT_NAME_LENGTH);
             }
 
-            let serializedParams = JSON.stringify(eventParams);
-
+            // Estimate serialized size before truncating
+            const serializedParams = JSON.stringify(eventParams);
             if (serializedParams.length > MAX_EVENT_PARAMS_SIZE) {
                 this.log(
                     `event_params size (${serializedParams.length} bytes) exceeds the limit of ${MAX_EVENT_PARAMS_SIZE} bytes. Truncating.`,
                     "warn",
                     true
                 );
-                serializedParams = serializedParams.slice(0, MAX_EVENT_PARAMS_SIZE - 3) + "...";
+
+                // Truncate eventParams object itself
+                eventParams = this.truncateObject(eventParams, MAX_EVENT_PARAMS_SIZE);
             }
 
             const event = {
                 event_name: eventName,
                 event_timestamp: new Date().toISOString(),
                 ...this.getBrowserData(),
-                event_params: JSON.parse(serializedParams),
+                event_params: eventParams,
             };
 
             this.log("Tracking Event:", "info", false, event);
         }
-
-
-
 
         /**
          * Sets user identifiers.
@@ -113,14 +111,39 @@
             this.log("User Identifiers Updated:", "info", false, userIdentifiersEvent);
         }
 
+        /**
+         * Truncates an object to fit within a specified size limit while preserving JSON validity.
+         * @param {Object} obj - The object to truncate.
+         * @param {number} maxSize - The maximum size in bytes.
+         * @returns {Object} - The truncated object.
+         */
+        truncateObject(obj, maxSize) {
+            let size = 0;
 
+            const truncated = {};
+            for (const [key, value] of Object.entries(obj)) {
+                if (size >= maxSize) break;
 
+                const entrySize = JSON.stringify({ [key]: value }).length;
+                if (size + entrySize > maxSize) {
+                    truncated[key] =
+                        typeof value === "string" ? value.slice(0, maxSize - size) + "..." : value;
+                    size = maxSize; // Enforce limit
+                } else {
+                    truncated[key] = value;
+                    size += entrySize;
+                }
+            }
+
+            return truncated;
+        }
 
         /**
          * Logs messages to the console with a consistent prefix and conditional verbosity.
          * @param {string} message - The message to log.
          * @param {string} type - The log type: 'info', 'warn', 'error', etc.
          * @param {boolean} force - If true, always log regardless of debug mode.
+         * @param {Object} data - Optional data to log with the message.
          */
         log(message, type = "log", force = false, data = null) {
             const prefix = "Pharaon: ";
@@ -132,8 +155,6 @@
                 }
             }
         }
-
-
 
         /**
          * Retrieves browser data.
