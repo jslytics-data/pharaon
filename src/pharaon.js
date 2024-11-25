@@ -72,11 +72,12 @@
                 event_name: eventName,
                 event_timestamp: new Date().toISOString(),
                 ...this.getBrowserData(),
-                event_params: serializedParams,
+                event_params: JSON.parse(serializedParams),
             };
 
             this.log("Tracking Event:", "info", false, event);
         }
+
 
 
 
@@ -114,6 +115,7 @@
 
 
 
+
         /**
          * Logs messages to the console with a consistent prefix and conditional verbosity.
          * @param {string} message - The message to log.
@@ -123,13 +125,14 @@
         log(message, type = "log", force = false, data = null) {
             const prefix = "Pharaon: ";
             if (force || this.config.debug) {
-                if (data && typeof data === "object") {
+                if (data) {
                     console[type](`${prefix}${message}`, data);
                 } else {
                     console[type](`${prefix}${message}`);
                 }
             }
         }
+
 
 
         /**
