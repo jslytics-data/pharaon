@@ -47,7 +47,7 @@
                 return;
             }
 
-            // Check and truncate long event names
+            const MAX_EVENT_NAME_LENGTH = 256;
             if (eventName.length > MAX_EVENT_NAME_LENGTH) {
                 this.log(
                     `Event name length (${eventName.length} characters) exceeds the limit of ${MAX_EVENT_NAME_LENGTH}. Truncating.`,
@@ -59,7 +59,6 @@
 
             let serializedParams = JSON.stringify(eventParams);
 
-            // Check size and truncate if necessary
             if (serializedParams.length > MAX_EVENT_PARAMS_SIZE) {
                 this.log(
                     `event_params size (${serializedParams.length} bytes) exceeds the limit of ${MAX_EVENT_PARAMS_SIZE} bytes. Truncating.`,
@@ -76,8 +75,9 @@
                 event_params: serializedParams,
             };
 
-            this.log("Tracking Event: " + JSON.stringify(event), "info");
+            this.log("Tracking Event:", "info", false, event);
         }
+
 
 
         /**
@@ -106,11 +106,13 @@
             const userIdentifiersEvent = {
                 user_pseudo_id: this.getUserPseudoId(),
                 timestamp_assignment: new Date().toISOString(),
-                user_identifiers: serializedIdentifiers,
+                user_identifiers: identifiers,
             };
 
-            this.log("User Identifiers Updated: " + JSON.stringify(userIdentifiersEvent), "info");
+            this.log("User Identifiers Updated:", "info", false, userIdentifiersEvent);
         }
+
+
 
         /**
          * Logs messages to the console with a consistent prefix and conditional verbosity.
