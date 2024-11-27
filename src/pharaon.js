@@ -326,7 +326,7 @@
          * Retrieves a cookie value by name.
          */
         getCookie(name) {
-            const escapedName = name.replace(/([.*+?^${}()|[\]\\])/g, '\\$1');
+            const escapedName = name.replace(/([.*+?^${}()|[\\]\\\\])/g, '\\\\$1');
             const regex = new RegExp('(?:^|; )' + escapedName + '=([^;]*)');
             const match = (typeof document !== 'undefined' && document.cookie.match(regex));
             return match ? match[1] : null;
@@ -340,5 +340,24 @@
         }
     }
 
-    window.pharaon = new Pharaon();
+    // Preserve any existing pharaon object and its queue
+    var existingPharaon = window.pharaon || {};
+    var pharaonInstance = new Pharaon();
+
+    // Process any queued method calls
+    if (existingPharaon.q && existingPharaon.q.length > 0) {
+        existingPharaon.q.forEach(function(item) {
+            var methodName = item[0];
+            var args = item[1];
+            if (typeof pharaonInstance[methodName] === 'function') {
+                pharaonInstance[methodName].apply(pharaonInstance, args);
+            } else {
+                pharaonInstance.log(`Method ${methodName} is not defined.`, "error", true);
+            }
+        });
+    }
+
+    // Replace the global pharaon object with the new instance
+    window.pharaon = pharaonInstance;
+
 })(window);
