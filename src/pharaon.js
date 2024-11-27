@@ -3,17 +3,13 @@
     const MAX_USER_IDENTIFIERS_SIZE = 2048; // 2 KB limit for user identifiers
     const COOKIE_MAX_AGE = 31536000; // One year in seconds
 
-    /**
-     * Pharaon web tracking library
-     */
     class Pharaon {
         constructor() {
             this.config = {};
             this.queue = [];
             this.isInitialized = false;
-            this.userIdentifiers = {}; // Holds current user identifiers
+            this.userIdentifiers = {};
 
-            // Check if localStorage is available
             this.localStorageAvailable = this.isLocalStorageAvailable();
             this.deviceUserAgent = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
             this.devicePlatform = (typeof navigator !== 'undefined' && navigator.platform) || '';
@@ -26,9 +22,12 @@
         init(config) {
             try {
                 this.config = { ...this.config, ...config };
+                if (!this.config.endpoint) {
+                    throw new Error("Endpoint URL is required in the config.");
+                }
                 this.isInitialized = true;
                 this.processQueue();
-                this.log("Initialized with config: " + JSON.stringify(this.config), "info");
+                this.log(`Initialized with config: ${JSON.stringify(this.config)}`, "info");
             } catch (error) {
                 this.log(`Error in init: ${error.message}`, "error", true);
             }
@@ -61,13 +60,11 @@
                     eventName = eventName.slice(0, MAX_EVENT_NAME_LENGTH);
                 }
 
-                // Validate eventParams is a plain object
                 if (!this.isPlainObject(eventParams)) {
                     this.log("eventParams must be a flat object.", "error", true);
                     return;
                 }
 
-                // Estimate serialized size before truncating
                 let serializedParams;
                 try {
                     serializedParams = JSON.stringify(eventParams);
@@ -82,8 +79,6 @@
                         "warn",
                         true
                     );
-
-                    // Truncate eventParams object itself
                     eventParams = this.truncateObject(eventParams, MAX_EVENT_PARAMS_SIZE);
                 }
 
@@ -94,7 +89,7 @@
                     event_params: eventParams,
                 };
 
-                this.log("Tracking Event:", "info", false, event);
+                this.sendToServer(`${this.config.endpoint}/events`, event, "Event");
             } catch (error) {
                 this.log(`Error in trackEvent: ${error.message}`, "error", true);
             }
@@ -128,25 +123,48 @@
                     return;
                 }
 
-                this.userIdentifiers = { ...this.userIdentifiers, ...identifiers };
-
                 const userIdentifiersEvent = {
                     user_pseudo_id: this.getUserPseudoId(),
                     timestamp_assignment: new Date().toISOString(),
                     user_identifiers: identifiers,
                 };
 
-                this.log("User Identifiers Updated:", "info", false, userIdentifiersEvent);
+                this.sendToServer(`${this.config.endpoint}/identifiers`, userIdentifiersEvent, "User Identifiers");
             } catch (error) {
                 this.log(`Error in setUserIdentifiers: ${error.message}`, "error", true);
             }
         }
 
         /**
+         * Sends data to the server via a POST request.
+         * @param {string} url - The endpoint URL.
+         * @param {Object} payload - The data to send.
+         * @param {string} type - The type of data being sent (for logging).
+         */
+        sendToServer(url, payload, type) {
+            try {
+                fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            this.log(`Failed to send ${type}. Response status: ${response.status}`, "error", true);
+                        } else {
+                            this.log(`${type} successfully sent to ${url}`, "info");
+                        }
+                    })
+                    .catch((err) => {
+                        this.log(`Error sending ${type}: ${err.message}`, "error", true);
+                    });
+            } catch (error) {
+                this.log(`Error in sendToServer: ${error.message}`, "error", true);
+            }
+        }
+
+        /**
          * Truncates an object to fit within a specified size limit while preserving JSON validity.
-         * @param {Object} obj - The object to truncate.
-         * @param {number} maxSize - The maximum size in bytes.
-         * @returns {Object} - The truncated object.
          */
         truncateObject(obj, maxSize) {
             let size = 0;
@@ -178,10 +196,6 @@
 
         /**
          * Logs messages to the console with a consistent prefix and conditional verbosity.
-         * @param {string} message - The message to log.
-         * @param {string} type - The log type: 'info', 'warn', 'error', etc.
-         * @param {boolean} force - If true, always log regardless of debug mode.
-         * @param {Object} data - Optional data to log with the message.
          */
         log(message, type = "log", force = false, data = null) {
             const prefix = "Pharaon: ";
@@ -196,7 +210,6 @@
 
         /**
          * Retrieves browser data.
-         * @returns {Object} - Browser data.
          */
         getBrowserData() {
             const userTimezone = (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC';
@@ -218,7 +231,6 @@
 
         /**
          * Retrieves or creates the user pseudo ID.
-         * @returns {string} - User pseudo ID.
          */
         getUserPseudoId() {
             let pseudoId = null;
@@ -274,7 +286,6 @@
 
         /**
          * Checks if localStorage is available.
-         * @returns {boolean} - True if localStorage is available, false otherwise.
          */
         isLocalStorageAvailable() {
             try {
@@ -290,7 +301,6 @@
 
         /**
          * Generates a UUID.
-         * @returns {string} - UUID string.
          */
         generateUUID() {
             if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -298,25 +308,12 @@
             } else if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
                 const buf = new Uint8Array(16);
                 crypto.getRandomValues(buf);
-                // Adapted from RFC 4122 version 4 UUID generation
                 buf[6] = (buf[6] & 0x0f) | 0x40; // Version 4
                 buf[8] = (buf[8] & 0x3f) | 0x80; // Variant 10
-
-                const byteToHex = [];
-                for (let i = 0; i < 256; ++i) {
-                    byteToHex[i] = (i + 0x100).toString(16).substr(1);
-                }
-
-                let uuid = '';
-                for (let i = 0; i < 16; ++i) {
-                    uuid += byteToHex[buf[i]];
-                    if (i === 3 || i === 5 || i === 7 || i === 9) {
-                        uuid += '-';
-                    }
-                }
-                return uuid;
+                return Array.from(buf)
+                    .map((byte) => byte.toString(16).padStart(2, '0'))
+                    .join('');
             } else {
-                // As a last resort, use Math.random (less secure)
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
                     const r = Math.random() * 16 | 0;
                     const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -327,8 +324,6 @@
 
         /**
          * Retrieves a cookie value by name.
-         * @param {string} name - Cookie name.
-         * @returns {string|null} - Cookie value or null if not found.
          */
         getCookie(name) {
             const escapedName = name.replace(/([.*+?^${}()|[\]\\])/g, '\\$1');
@@ -339,14 +334,11 @@
 
         /**
          * Checks if a value is a plain object.
-         * @param {any} obj - The value to check.
-         * @returns {boolean} - True if obj is a plain object, false otherwise.
          */
         isPlainObject(obj) {
             return Object.prototype.toString.call(obj) === '[object Object]';
         }
     }
 
-    // Instantiate and expose the Pharaon tracker
     window.pharaon = new Pharaon();
 })(window);
