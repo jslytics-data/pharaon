@@ -235,32 +235,45 @@
         getUserPseudoId() {
             let pseudoId = null;
 
+            // Try to retrieve from localStorage
             if (this.localStorageAvailable) {
                 try {
-                    pseudoId = localStorage.getItem("js_user_pseudo_id");
+                    pseudoId = localStorage.getItem("pharaon_user_pseudo_id");
                 } catch (e) {
                     this.log("Error accessing localStorage: " + e.message, "warn", true);
                     this.localStorageAvailable = false;
                 }
             }
 
+            // Try to retrieve from cookies if not in localStorage
             if (!pseudoId) {
-                pseudoId = this.getCookie("js_user_pseudo_id");
+                pseudoId = this.getCookie("pharaon_user_pseudo_id");
             }
 
+            // Generate a new UUID if not found
             if (!pseudoId) {
-                pseudoId = this.generateUUID();
+                try {
+                    pseudoId = this.generateUUID();
+                } catch (e) {
+                    // If UUID generation fails, log error and abort tracking
+                    this.log("Cannot generate user pseudo ID: " + e.message, "error", true);
+                    throw new Error("Cannot proceed without a user pseudo ID.");
+                }
+
+                // Store in localStorage if available
                 if (this.localStorageAvailable) {
                     try {
-                        localStorage.setItem("js_user_pseudo_id", pseudoId);
+                        localStorage.setItem("pharaon_user_pseudo_id", pseudoId);
                     } catch (e) {
                         this.log("Error setting item in localStorage: " + e.message, "warn", true);
                         this.localStorageAvailable = false;
                     }
                 }
+
+                // Store in cookies
                 try {
                     if (typeof document !== 'undefined') {
-                        document.cookie = `js_user_pseudo_id=${pseudoId}; path=/; max-age=${COOKIE_MAX_AGE}; Secure; SameSite=Lax`;
+                        document.cookie = `pharaon_user_pseudo_id=${pseudoId}; path=/; max-age=${COOKIE_MAX_AGE}; Secure; SameSite=Lax`;
                     }
                 } catch (e) {
                     this.log("Error setting cookie: " + e.message, "warn", true);
@@ -269,6 +282,7 @@
 
             return pseudoId;
         }
+
 
         /**
          * Processes the queued events.
@@ -303,24 +317,56 @@
          * Generates a UUID.
          */
         generateUUID() {
-            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                // Use crypto.randomUUID if available (most modern browsers)
                 return crypto.randomUUID();
-            } else if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            } else if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+                // Fallback to crypto.getRandomValues if crypto.randomUUID is not available
                 const buf = new Uint8Array(16);
                 crypto.getRandomValues(buf);
-                buf[6] = (buf[6] & 0x0f) | 0x40; // Version 4
-                buf[8] = (buf[8] & 0x3f) | 0x80; // Variant 10
-                return Array.from(buf)
-                    .map((byte) => byte.toString(16).padStart(2, '0'))
-                    .join('');
+
+                // Per RFC 4122 v4 UUID
+                buf[6] = (buf[6] & 0x0f) | 0x40; // Set version to 4
+                buf[8] = (buf[8] & 0x3f) | 0x80; // Set variant to 10
+
+                const byteToHex = [];
+                for (let i = 0; i < 256; ++i) {
+                    byteToHex.push((i + 0x100).toString(16).substr(1));
+                }
+
+                return (
+                    byteToHex[buf[0]] +
+                    byteToHex[buf[1]] +
+                    byteToHex[buf[2]] +
+                    byteToHex[buf[3]] +
+                    '-' +
+                    byteToHex[buf[4]] +
+                    byteToHex[buf[5]] +
+                    '-' +
+                    byteToHex[buf[6]] +
+                    byteToHex[buf[7]] +
+                    '-' +
+                    byteToHex[buf[8]] +
+                    byteToHex[buf[9]] +
+                    '-' +
+                    byteToHex[buf[10]] +
+                    byteToHex[buf[11]] +
+                    byteToHex[buf[12]] +
+                    byteToHex[buf[13]] +
+                    byteToHex[buf[14]] +
+                    byteToHex[buf[15]]
+                );
             } else {
-                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                    const r = Math.random() * 16 | 0;
-                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                    return v.toString(16);
-                });
+                // Secure methods are not available; log error and throw exception
+                this.log(
+                    "Secure random number generation is not available in this environment. Cannot generate a secure UUID.",
+                    "error",
+                    true
+                );
+                throw new Error("Secure random number generation is not available.");
             }
         }
+
 
         /**
          * Retrieves a cookie value by name.
