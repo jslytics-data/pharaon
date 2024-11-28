@@ -22,9 +22,16 @@
         init(config) {
             try {
                 this.config = { ...this.config, ...config };
+
                 if (!this.config.endpoint) {
                     throw new Error("Endpoint URL is required in the config.");
                 }
+
+                // Ensure endpoint has a protocol
+                if (!/^https?:\/\//i.test(this.config.endpoint)) {
+                    throw new Error("Invalid endpoint URL. It must include a protocol (e.g., https://).");
+                }
+
                 this.isInitialized = true;
                 this.processQueue();
                 this.log(`Initialized with config: ${JSON.stringify(this.config)}`, "info");
@@ -32,6 +39,7 @@
                 this.log(`Error in init: ${error.message}`, "error", true);
             }
         }
+
 
         /**
          * Tracks an event with the given name and parameters.
